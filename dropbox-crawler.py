@@ -1,4 +1,4 @@
-import sys, os, shutil, signal, logging
+import sys, os, shutil, signal, logging, time
 import dropbox, msgpack
 from datetime import datetime
 from threading import Thread, Event
@@ -20,17 +20,32 @@ save_interval = 120 # periodically save every n seconds
 save_interval_entries = 500 # save when n items have been updated
 updated_entries = 0 # count how many entries have been updated
 
+def wait_for_event(event, seconds):
+    if os.name != 'nt':
+        return event.wait(seconds)
+    t0 = time.time()
+    while (time.time() - t0) < seconds:
+        if event.is_set():
+            return True
+    return False
+
 def exit_handler(signum, frame):
     global stop_request
-    log.warn("waiting for crawler thread to finish")
+    log.warning("waiting for crawler thread to finish")
     stop_request = True
     signal.signal(signal.SIGINT, original_sigint)
     try:
-        if not finished.wait(60):
-            log.error('thread timed out! data may be lost')
-            sys.exit(1)
+        if not wait_for_event(finished, 60):
+            if os.name == 'nt':
+                log.error('Thread timed out! You might have to kill this process..')
+            else:
+                log.error('Thread timed out! Data may be lost')
+                sys.exit(1)
     except KeyboardInterrupt:
-        print('exiting anyway? (data may be lost!)')
+        if os.name == 'nt':
+            log.error('The worker thread is not responding. You might have to kill the process manually..')
+        else:
+            log.warning('Exiting anyway.. (data may be lost!)')
         sys.exit(1)
     sys.exit(0)
 
@@ -97,6 +112,7 @@ def crawl():
 
     save_data()
     finished.set()
+    log.info('Worker thread exited normally')
 
 class File:
     def __init__(self, name, size):
@@ -202,5 +218,12 @@ if __name__ == '__main__':
     #print('polling for updates..')
 
     original_sigint = signal.signal(signal.SIGINT, exit_handler)
-    signal.pause()
+    if os.name != 'nt':
+        signal.pause()
+    else:
+        try:
+            while True:
+                time.sleep(10)
+        except KeyboardInterrupt:
+            pass
 
