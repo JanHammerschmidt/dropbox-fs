@@ -20,6 +20,13 @@ save_interval = 120 # periodically save every n seconds
 save_interval_entries = 500 # save when n items have been updated
 updated_entries = 0 # count how many entries have been updated
 
+def remove_from_dict_case_insensitive(dict, key):
+    key_lower = key.lower()
+    existing_key = next((k for k in dict.keys() if k.lower() == key_lower), None)
+    if existing_key is not None:
+        log.debug('change {} to {}'.format(existing_key, key))
+        del dict[existing_key]
+
 def wait_for_event(event, seconds):
     if os.name != 'nt':
         return event.wait(seconds)
@@ -31,7 +38,7 @@ def wait_for_event(event, seconds):
 
 def exit_handler(signum, frame):
     global stop_request
-    log.warning("waiting for crawler thread to finish")
+    log.info("Waiting for crawler thread to finish (this might take a while..)")
     stop_request = True
     signal.signal(signal.SIGINT, original_sigint)
     try:
@@ -58,21 +65,30 @@ def update_tree(data):
         folder = root
         for f in path_components[:-1]:
             try:
-                folder = folder.folders[f]
-            except KeyError:
+                f_lower = f.lower()
+                folder = next(val for key, val in folder.folders.items() if key.lower() == f_lower) #folder.folders[f]
+            except StopIteration:
                 new_folder = Folder(f)
+                #remove_from_dict_case_insensitive(folder.folders, f)
                 folder.folders[f] = new_folder
                 folder = new_folder
         f = path_components[-1]
         if isinstance(e, FileMetadata):
+            #log.debug('add/change file {}'.format(e.path_display))
+            if f not in folder.files:
+                remove_from_dict_case_insensitive(folder.files, f)
             folder.files[f] = File(f, e.size)
+            # if f == data_file:
+            #     data_file_updates += 1
         elif isinstance(e, FolderMetadata):
+            #log.debug('add/change folder {}'.format(e.path_display))
+            if f not in folder.folders:
+                remove_from_dict_case_insensitive(folder.folders, f)
             folder.folders[f] = Folder(f)
         else: #DeletedMetadata
-            if f in folder.files:
-                del folder.files[f]
-            if f in folder.folders:
-                del folder.folders[f]
+            #log.debug('removing file/folder {}'.format(e.path_display))
+            remove_from_dict_case_insensitive(folder.files, f)
+            remove_from_dict_case_insensitive(folder.folders, f)
     return data.cursor
 
 def crawl():
