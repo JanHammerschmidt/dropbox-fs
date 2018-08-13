@@ -38,7 +38,7 @@ def wait_for_event(event, seconds):
 
 def exit_handler(signum, frame):
     global stop_request
-    log.info("Waiting for crawler thread to finish (this might take a while..)")
+    log.info("Waiting for crawler thread to finish (this might take around 30s)")
     stop_request = True
     signal.signal(signal.SIGINT, original_sigint)
     try:
@@ -66,10 +66,9 @@ def update_tree(data):
         for f in path_components[:-1]:
             try:
                 f_lower = f.lower()
-                folder = next(val for key, val in folder.folders.items() if key.lower() == f_lower) #folder.folders[f]
+                folder = next(val for key, val in folder.folders.items() if key.lower() == f_lower)
             except StopIteration:
                 new_folder = Folder(f)
-                #remove_from_dict_case_insensitive(folder.folders, f)
                 folder.folders[f] = new_folder
                 folder = new_folder
         f = path_components[-1]
@@ -78,8 +77,6 @@ def update_tree(data):
             if f not in folder.files:
                 remove_from_dict_case_insensitive(folder.files, f)
             folder.files[f] = File(f, e.size)
-            # if f == data_file:
-            #     data_file_updates += 1
         elif isinstance(e, FolderMetadata):
             #log.debug('add/change folder {}'.format(e.path_display))
             if f not in folder.folders:
@@ -117,12 +114,13 @@ def crawl():
     log.info('poll for changes..')
     global update_cursor
     while not stop_request:
-        changes = dbx.files_list_folder_longpoll(update_cursor) # todo: backoff in data?
-        if stop_request:
-            break
+        log.debug('longpoll')
+        changes = dbx.files_list_folder_longpoll(update_cursor, timeout=30) # TODO: what if `changes.backoff is not None`?
         if changes.changes:
             data = dbx.files_list_folder_continue(update_cursor)
             update_cursor = update_tree(data)
+        if stop_request:
+            break
         if (datetime.now() - last_save).total_seconds() > save_interval or updated_entries >= save_interval_entries:
             save_data()
 
@@ -153,7 +151,7 @@ class Folder:
                            'folders': list(self.folders.values())}, use_bin_type=True, default=lambda o: o.msgpack_pack()))
 
 def msgpack_unpack(code, data):
-    if code == 21:
+    if code == 21: # the codes are rather arbitrary
         data = msgpack.unpackb(data, encoding='utf-8', ext_hook=msgpack_unpack)
         return Folder(data['name'], data['files'], data['folders'])
     elif code == 81:
