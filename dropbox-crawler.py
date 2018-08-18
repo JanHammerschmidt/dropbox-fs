@@ -80,7 +80,7 @@ def update_tree(data):
             # log.debug('add/change file {}'.format(e.path_display))
             if f not in folder.files:
                 remove_from_dict_case_insensitive(folder.files, f)
-            folder.files[f] = File(f, e.size)
+            folder.files[f] = File(f, e)
         elif isinstance(e, FolderMetadata):
             # log.debug('add/change folder {}'.format(e.path_display))
             if f not in folder.folders:
@@ -136,9 +136,10 @@ def crawl():
 
 
 class File:
-    def __init__(self, name, size):
+    def __init__(self, name, metadata):
         self.name = name
-        self.size = size
+        self.size = metadata.size
+        self.modified = metadata.client_modified
 
     def msgpack_pack(self):
         return msgpack.ExtType(81,
