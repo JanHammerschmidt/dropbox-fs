@@ -16,9 +16,10 @@ stop_request = False
 finished_crawling = False
 data_file = 'data.msgpack'
 last_save = datetime.now()
-save_interval = 120 # periodically save every n seconds
-save_interval_entries = 500 # save when n items have been updated
-updated_entries = 0 # count how many entries have been updated
+save_interval = 120  # periodically save every n seconds
+save_interval_entries = 500  # save when n items have been updated
+updated_entries = 0  # count how many entries have been updated
+
 
 def remove_from_dict_case_insensitive(dict, key):
     key_lower = key.lower()
@@ -26,6 +27,7 @@ def remove_from_dict_case_insensitive(dict, key):
     if existing_key is not None:
         log.debug('change {} to {}'.format(existing_key, key))
         del dict[existing_key]
+
 
 def wait_for_event(event, seconds):
     if os.name != 'nt':
@@ -35,6 +37,7 @@ def wait_for_event(event, seconds):
         if event.is_set():
             return True
     return False
+
 
 def exit_handler(signum, frame):
     global stop_request
@@ -56,6 +59,7 @@ def exit_handler(signum, frame):
         sys.exit(1)
     sys.exit(0)
 
+
 def update_tree(data):
     global updated_entries
     log.debug('new data (%i entries)' % len(data.entries))
@@ -73,20 +77,21 @@ def update_tree(data):
                 folder = new_folder
         f = path_components[-1]
         if isinstance(e, FileMetadata):
-            #log.debug('add/change file {}'.format(e.path_display))
+            # log.debug('add/change file {}'.format(e.path_display))
             if f not in folder.files:
                 remove_from_dict_case_insensitive(folder.files, f)
             folder.files[f] = File(f, e.size)
         elif isinstance(e, FolderMetadata):
-            #log.debug('add/change folder {}'.format(e.path_display))
+            # log.debug('add/change folder {}'.format(e.path_display))
             if f not in folder.folders:
                 remove_from_dict_case_insensitive(folder.folders, f)
             folder.folders[f] = Folder(f)
-        else: #DeletedMetadata
-            #log.debug('removing file/folder {}'.format(e.path_display))
+        else:  # DeletedMetadata
+            # log.debug('removing file/folder {}'.format(e.path_display))
             remove_from_dict_case_insensitive(folder.files, f)
             remove_from_dict_case_insensitive(folder.folders, f)
     return data.cursor
+
 
 def crawl():
     global space_used, space_allocated
@@ -99,7 +104,7 @@ def crawl():
     global crawl_cursor, finished_crawling
     if not finished_crawling:
         log.info('start crawling..')
-        if crawl_cursor == None:
+        if crawl_cursor is None:
             data = dbx.files_list_folder(db_path, recursive=True)
             crawl_cursor = update_tree(data)
         while not stop_request:
@@ -115,7 +120,8 @@ def crawl():
     global update_cursor
     while not stop_request:
         log.debug('longpoll')
-        changes = dbx.files_list_folder_longpoll(update_cursor, timeout=30) # TODO: what if `changes.backoff is not None`?
+        changes = dbx.files_list_folder_longpoll(update_cursor, timeout=30)
+        # TODO: what if `changes.backoff is not None`?
         if changes.changes:
             data = dbx.files_list_folder_continue(update_cursor)
             update_cursor = update_tree(data)
@@ -128,6 +134,7 @@ def crawl():
     finished.set()
     log.info('Worker thread exited normally')
 
+
 class File:
     def __init__(self, name, size):
         self.name = name
@@ -135,29 +142,32 @@ class File:
 
     def msgpack_pack(self):
         return msgpack.ExtType(81,
-            msgpack.packb({'name': self.name, 'size': self.size}, use_bin_type=True))
+                               msgpack.packb({'name': self.name, 'size': self.size}, use_bin_type=True))
 
 
 class Folder:
-    def __init__(self, name, files=[], folders=[]):
+    def __init__(self, name, files=None, folders=None):
         self.name = name
-        self.files = {f.name: f for f in files}
-        self.folders = {f.name: f for f in folders}
+        self.files = {} if files is None else {f.name: f for f in files}
+        self.folders = {} if folders is None else {f.name: f for f in folders}
 
     def msgpack_pack(self):
         return msgpack.ExtType(21,
-            msgpack.packb({'name': self.name,
-                           'files': list(self.files.values()),
-                           'folders': list(self.folders.values())}, use_bin_type=True, default=lambda o: o.msgpack_pack()))
+                               msgpack.packb({'name': self.name,
+                                              'files': list(self.files.values()),
+                                              'folders': list(self.folders.values())},
+                                             use_bin_type=True, default=lambda o: o.msgpack_pack()))
+
 
 def msgpack_unpack(code, data):
-    if code == 21: # the codes are rather arbitrary
+    if code == 21:  # these codes are rather arbitrary
         data = msgpack.unpackb(data, encoding='utf-8', ext_hook=msgpack_unpack)
         return Folder(data['name'], data['files'], data['folders'])
     elif code == 81:
         data = msgpack.unpackb(data, encoding='utf-8', ext_hook=msgpack_unpack)
         return File(data['name'], data['size'])
     raise RuntimeError('unknown msgpack extension type %i', code)
+
 
 def load_data():
     global root, crawl_cursor, update_cursor, finished_crawling, space_used, space_allocated, last_save
@@ -181,11 +191,12 @@ def load_data():
         update_cursor = dbx.files_list_folder_get_latest_cursor(db_path, recursive=True, include_deleted=True).cursor
     return False
 
+
 def save_data():
     global last_save, updated_entries
     log.debug('save data to %s' % data_file)
     was_finished = finished.is_set()
-    finished.clear() # don't kill the process during saving data!
+    finished.clear()  # don't kill the process during saving data!
     try:
         shutil.move(data_file, 'data.prev.msgpack')
     except:
@@ -206,6 +217,7 @@ def save_data():
     if was_finished:
         finished.set()
 
+
 def init_logging():
     formatter = logging.Formatter('%(asctime)s.%(msecs)03d %(threadName)s: '
                                   '[%(name)s] %(message)s', datefmt="%Y-%m-%d %H:%M:%S")
@@ -214,10 +226,10 @@ def init_logging():
     log.addHandler(handler)
     log.setLevel(logging.DEBUG)
 
+
 if __name__ == '__main__':
     init_logging()
     log.info('connecting to dropbox')
-    global dbx, original_sigint
     dbx = dropbox.Dropbox(db_token)
 
     # Check that the access token is valid
@@ -229,7 +241,7 @@ if __name__ == '__main__':
     load_data()
     Thread(target=crawl).start()
 
-    #print('polling for updates..')
+    # print('polling for updates..')
 
     original_sigint = signal.signal(signal.SIGINT, exit_handler)
     if os.name != 'nt':
@@ -240,4 +252,3 @@ if __name__ == '__main__':
                 time.sleep(10)
         except KeyboardInterrupt:
             pass
-
