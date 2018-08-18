@@ -6,7 +6,7 @@ from dropbox.exceptions import ApiError, AuthError
 from dropbox.files import FileMetadata, FolderMetadata
 
 db_token = '' # insert own db token here
-db_path = '' # for dropbox root use ''. Otherwise prepend a '/'
+db_base_path = ''  # for dropbox root use ''. Otherwise prepend a '/'
 
 log = logging.getLogger('crawler')
 console = logging.StreamHandler()
@@ -105,7 +105,7 @@ def crawl():
     if not finished_crawling:
         log.info('start crawling..')
         if crawl_cursor is None:
-            data = dbx.files_list_folder(db_path, recursive=True)
+            data = dbx.files_list_folder(db_base_path, recursive=True)
             crawl_cursor = update_tree(data)
         while not stop_request:
             data = dbx.files_list_folder_continue(crawl_cursor)
@@ -175,6 +175,7 @@ def load_data():
     try:
         with open(data_file, 'rb') as f:
             data = msgpack.unpack(f, encoding='utf-8', ext_hook=msgpack_unpack)
+        db_base_path = data['root_path']
         root = data['root']
         crawl_cursor = data['crawl_cursor']
         update_cursor = data['update_cursor']
@@ -189,7 +190,7 @@ def load_data():
         root = Folder('root')
         crawl_cursor, finished_crawling = None, False
         log.debug("getting update cursor")
-        update_cursor = dbx.files_list_folder_get_latest_cursor(db_path, recursive=True, include_deleted=True).cursor
+        update_cursor = dbx.files_list_folder_get_latest_cursor(db_base_path, recursive=True, include_deleted=True).cursor
     return False
 
 
@@ -210,7 +211,8 @@ def save_data():
         'finished_crawling': finished_crawling,
         'space_used': space_used,
         'space_allocated': space_allocated,
-        'last_save': last_save.timestamp()
+        'last_save': last_save.timestamp(),
+        'root_path': db_base_path
     }
     with open(data_file, 'wb') as f:
         msgpack.pack(data, f, default=lambda o: o.msgpack_pack())
