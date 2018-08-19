@@ -1,5 +1,5 @@
 import sys, os, shutil, signal, logging, time
-import dropbox, msgpack
+import dropbox, pickle
 from datetime import datetime
 from threading import Thread, Event
 from dropbox.exceptions import ApiError, AuthError
@@ -14,11 +14,12 @@ console = logging.StreamHandler()
 finished = Event()
 stop_request = False
 finished_crawling = False
-data_file = 'data.msgpack'
+data_file = 'data.pkl'
 last_save = datetime.now()
 save_interval = 120  # periodically save every n seconds
 save_interval_entries = 500  # save when n items have been updated
 updated_entries = 0  # count how many entries have been updated
+data_version = 1  # bump this on changes how the data is saved
 
 
 def remove_from_dict_case_insensitive(dict, key):
@@ -141,10 +142,6 @@ class File:
         self.size = metadata.size
         self.modified = metadata.client_modified
 
-    def msgpack_pack(self):
-        return msgpack.ExtType(81,
-                               msgpack.packb({'name': self.name, 'size': self.size}, use_bin_type=True))
-
 
 class Folder:
     def __init__(self, name, files=None, folders=None):
@@ -152,29 +149,15 @@ class Folder:
         self.files = {} if files is None else {f.name: f for f in files}
         self.folders = {} if folders is None else {f.name: f for f in folders}
 
-    def msgpack_pack(self):
-        return msgpack.ExtType(21,
-                               msgpack.packb({'name': self.name,
-                                              'files': list(self.files.values()),
-                                              'folders': list(self.folders.values())},
-                                             use_bin_type=True, default=lambda o: o.msgpack_pack()))
-
-
-def msgpack_unpack(code, data):
-    if code == 21:  # these codes are rather arbitrary
-        data = msgpack.unpackb(data, encoding='utf-8', ext_hook=msgpack_unpack)
-        return Folder(data['name'], data['files'], data['folders'])
-    elif code == 81:
-        data = msgpack.unpackb(data, encoding='utf-8', ext_hook=msgpack_unpack)
-        return File(data['name'], data['size'])
-    raise RuntimeError('unknown msgpack extension type %i', code)
-
 
 def load_data():
-    global root, crawl_cursor, update_cursor, finished_crawling, space_used, space_allocated, last_save
+    global root, crawl_cursor, update_cursor, finished_crawling, space_used, space_allocated, last_save, db_base_path
     try:
         with open(data_file, 'rb') as f:
-            data = msgpack.unpack(f, encoding='utf-8', ext_hook=msgpack_unpack)
+            data = pickle.load(f)
+        if data['data_version'] != data_version:
+            log.error('incompatible versions of script ({}) and data file ({})'.format(data_version, data['data_version']))
+            raise RuntimeError('loading failed')
         db_base_path = data['root_path']
         root = data['root']
         crawl_cursor = data['crawl_cursor']
@@ -200,22 +183,23 @@ def save_data():
     was_finished = finished.is_set()
     finished.clear()  # don't kill the process during saving data!
     try:
-        shutil.move(data_file, 'data.prev.msgpack')
+        shutil.move(data_file, 'data.prev.pkl')
     except:
         pass
     last_save = datetime.now()
     data = {
+        'data_version': data_version,
+        'root_path': db_base_path,
         'root': root,
         'crawl_cursor': crawl_cursor,
         'update_cursor': update_cursor,
         'finished_crawling': finished_crawling,
         'space_used': space_used,
         'space_allocated': space_allocated,
-        'last_save': last_save.timestamp(),
-        'root_path': db_base_path
+        'last_save': last_save.timestamp()
     }
     with open(data_file, 'wb') as f:
-        msgpack.pack(data, f, default=lambda o: o.msgpack_pack())
+        pickle.dump(data, f)
     updated_entries = 0
     if was_finished:
         finished.set()
