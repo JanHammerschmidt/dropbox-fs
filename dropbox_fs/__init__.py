@@ -63,6 +63,18 @@ class DropboxCrawler:
         log.info('Connecting to Dropbox...')
         self.dbx = dropbox.Dropbox(db_token)
 
+    def access_token_is_valid(self):
+        """ check if the access token is valid """
+        try:
+            self.dbx.users_get_current_account()
+            return True
+        except AuthError as err:
+            log.error(
+                "Invalid access token ({}). "
+                "Try re-generating an access token from the app console on the web.".format(str(err))
+            )
+            return False
+
     def update_tree(self, data):
         log.debug('new data (%i entries)' % len(data.entries))
         self._updated_entries += len(data.entries)
