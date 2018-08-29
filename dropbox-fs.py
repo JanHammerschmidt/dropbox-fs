@@ -1,7 +1,6 @@
-import os, signal, logging, sys, time, dropbox
+import os, signal, logging, sys, time
 from threading import Thread
-from dropbox_fs import load_data, crawl, finished, init_dropbox
-
+from dropbox_fs import DropboxCrawler
 
 log = logging.getLogger('dropbox_fs')
 
@@ -22,7 +21,7 @@ def exit_handler(signum, frame):
     stop_request = True
     signal.signal(signal.SIGINT, original_sigint)
     try:
-        if not wait_for_event(finished, 60):
+        if not wait_for_event(crawler._finished, 60):
             if os.name == 'nt':
                 log.error('Thread timed out! You might have to kill this process..')
             else:
@@ -36,6 +35,7 @@ def exit_handler(signum, frame):
         sys.exit(1)
     sys.exit(0)
 
+
 #console = logging.StreamHandler()
 def init_logging():
     formatter = logging.Formatter('%(asctime)s.%(msecs)03d %(threadName)s: '
@@ -47,11 +47,13 @@ def init_logging():
 
 
 if __name__ == '__main__':
+    global crawler
     init_logging()
-    init_dropbox()
+    crawler = DropboxCrawler()
 
-    load_data()
-    Thread(target=crawl).start()
+
+    crawler.load_data()
+    Thread(target=crawler.crawl).start()
 
     # print('polling for updates..')
 
