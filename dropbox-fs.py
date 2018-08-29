@@ -1,18 +1,10 @@
 import os, signal, logging, sys, time
 from threading import Thread
 from dropbox_fs import DropboxCrawler
+from dropbox_fs.misc import wait_for_event
 
 log = logging.getLogger('dropbox_fs')
 
-
-def wait_for_event(event, seconds):
-    if os.name != 'nt':
-        return event.wait(seconds)
-    t0 = time.time()
-    while (time.time() - t0) < seconds:
-        if event.is_set():
-            return True
-    return False
 
 
 def exit_handler(signum, frame):
@@ -47,7 +39,6 @@ def init_logging():
 
 
 if __name__ == '__main__':
-    global crawler
     init_logging()
     crawler = DropboxCrawler()
 

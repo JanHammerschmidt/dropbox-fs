@@ -11,10 +11,6 @@ data_file = 'data.pkl'
 
 # https://www.dropbox.com/developers/documentation/http/documentation#files-list_folder-continue
 
-db_token = ''  # insert own db token here
-db_base_path = ''  # for dropbox root use ''. Otherwise prepend a '/'
-
-
 log = logging.getLogger(__name__)
 
 
@@ -34,16 +30,16 @@ class Folder:
 
 class DropboxCrawler:
     root: Folder
+    dbx: dropbox.Dropbox
     _update_cursor: str
     _crawl_cursor: str
     _finished_crawling: bool
+    _db_token: str
+    _db_base_path: str
 
     def __init__(self):
-        """ db_base_path: for dropbox root use ''. Otherwise prepend a '/' """
-
         self.save_interval = 120  # periodically save every n seconds
         self.save_interval_entries = 500  # save when n items have been updated
-        self.db_base_path = db_base_path
 
         self.space_used = 0
         self.space_allocated = 0
@@ -54,13 +50,18 @@ class DropboxCrawler:
         self._last_save = datetime.now()
 
         self.reset()
-        log.info('Connecting to Dropbox...')
-        self.dbx = dropbox.Dropbox(db_token)
 
     def reset(self):
-        self.root = Folder(self.db_base_path)
+        self.root = Folder(self._db_base_path)
         self._crawl_cursor = None
         self._finished_crawling = False
+
+    def init(self, db_token, db_base_path=''):
+        """ db_base_path: for dropbox root use ''. Otherwise prepend a '/' """
+        self._db_token = db_token
+        self._db_base_path = db_base_path
+        log.info('Connecting to Dropbox...')
+        self.dbx = dropbox.Dropbox(db_token)
 
     def update_tree(self, data):
         log.debug('new data (%i entries)' % len(data.entries))
@@ -141,7 +142,7 @@ class DropboxCrawler:
                 log.error('incompatible versions of script ({}) and data file ({})'.format(data_version,
                                                                                            data['data_version']))
                 raise RuntimeError('loading failed')
-            self.db_base_path = data['root_path']
+            self._db_base_path = data['root_path']
             self.root = data['root']
             self._crawl_cursor = data['crawl_cursor']
             self._update_cursor = data['update_cursor']
@@ -155,7 +156,7 @@ class DropboxCrawler:
             log.error("loading data failed")
             self.reset()
             log.debug("getting update cursor")
-            self._update_cursor = self.dbx.files_list_folder_get_latest_cursor(self.db_base_path, recursive=True,
+            self._update_cursor = self.dbx.files_list_folder_get_latest_cursor(self._db_base_path, recursive=True,
                                                                                include_deleted=True).cursor
         return False
 
@@ -170,7 +171,7 @@ class DropboxCrawler:
         self._last_save = datetime.now()
         data = {
             'data_version': data_version,
-            'root_path': self.db_base_path,
+            'root_path': self._db_base_path,
             'root': self.root,
             'crawl_cursor': self._crawl_cursor,
             'update_cursor': self._update_cursor,
