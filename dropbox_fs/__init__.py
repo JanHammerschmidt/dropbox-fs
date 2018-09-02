@@ -38,6 +38,8 @@ class DropboxCrawler:
     _db_base_path: str
 
     def __init__(self):
+        """ You must either call `init` or `load_snapshot` to get things going."""
+
         self.save_interval = 120  # periodically save every n seconds
         self.save_interval_entries = 500  # save when n items have been updated
 
@@ -49,19 +51,19 @@ class DropboxCrawler:
         self._updated_entries = 0  # count how many entries have been updated
         self._last_save = datetime.now()
 
-        self.reset()
-
-    def reset(self):
-        self.root = Folder(self._db_base_path)
-        self._crawl_cursor = None
-        self._finished_crawling = False
+        self.dbx = None
 
     def init(self, db_token, db_base_path=''):
         """ db_base_path: for dropbox root use ''. Otherwise prepend a '/' """
         self._db_token = db_token
         self._db_base_path = db_base_path
+        self._crawl_cursor = None
+        self._finished_crawling = False
         log.info('Connecting to Dropbox...')
         self.dbx = dropbox.Dropbox(db_token)
+        self._update_cursor = self.dbx.files_list_folder_get_latest_cursor(self._db_base_path, recursive=True,
+                                                                           include_deleted=True).cursor
+        self.root = Folder(self._db_base_path)
 
     def access_token_is_valid(self):
         """ check if the access token is valid """
@@ -125,7 +127,7 @@ class DropboxCrawler:
                 if not data.has_more:
                     log.info('no further data')
                     self._finished_crawling = True
-                    self.save_data()
+                    self.save_snapshot()
                     break
 
         log.info('poll for changes..')
@@ -140,20 +142,21 @@ class DropboxCrawler:
                 break
             if (datetime.now() - self._last_save).total_seconds() > self.save_interval \
                     or self._updated_entries >= self.save_interval_entries:
-                self.save_data()
+                self.save_snapshot()
 
-        self.save_data()
+        self.save_snapshot()
         self._finished.set()
         log.info('Worker thread exited normally')
 
-    def load_data(self):
+    def load_snapshot(self):
         try:
             with open(data_file, 'rb') as f:
                 data = pickle.load(f)
             if data['data_version'] != data_version:
-                log.error('incompatible versions of script ({}) and data file ({})'.format(data_version,
-                                                                                           data['data_version']))
-                raise RuntimeError('loading failed')
+                raise RuntimeError(
+                    'incompatible versions of script ({}) and data file ({})'.format(
+                        data_version, data['data_version'])
+                )
             self._db_base_path = data['root_path']
             self.root = data['root']
             self._crawl_cursor = data['crawl_cursor']
@@ -164,15 +167,11 @@ class DropboxCrawler:
             self._last_save = datetime.fromtimestamp(data['last_save'])
             log.info('successfully loaded data')
             return True
-        except RuntimeError:
-            log.error("loading data failed")
-            self.reset()
-            log.debug("getting update cursor")
-            self._update_cursor = self.dbx.files_list_folder_get_latest_cursor(self._db_base_path, recursive=True,
-                                                                               include_deleted=True).cursor
-        return False
+        except RuntimeError as e:
+            log.error("loading data failed: {}".format(str(e)))
+            return False
 
-    def save_data(self):
+    def save_snapshot(self):
         log.debug('save data to %s' % data_file)
         was_finished = self._finished.is_set()
         self._finished.clear()  # don't kill the process during saving data!
