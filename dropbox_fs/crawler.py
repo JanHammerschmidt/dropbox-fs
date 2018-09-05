@@ -121,7 +121,7 @@ class DropboxCrawler:
         if not self._finished_crawling:
             log.info('start crawling..')
             if self._crawl_cursor is None:
-                data = dbx.files_list_folder(self.db_base_path, recursive=True)
+                data = dbx.files_list_folder(self._db_base_path, recursive=True)
                 self._crawl_cursor = self.update_tree(data)
             while not self._stop_request:
                 data = dbx.files_list_folder_continue(self._crawl_cursor)
