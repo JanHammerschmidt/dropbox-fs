@@ -17,10 +17,10 @@ log = logging.getLogger(__name__)
 
 
 class File:
-    def __init__(self, name, metadata):
+    def __init__(self, name, metadata: FileMetadata):
         self.name = name
         self.size = metadata.size
-        self.modified = metadata.client_modified
+        self.modified = metadata.server_modified
 
 
 class Folder:
