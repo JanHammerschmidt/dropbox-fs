@@ -42,7 +42,10 @@ def main():
     args = parser.parse_args()
 
     log_level = logging.DEBUG if args.verbose else logging.INFO
-    logging.basicConfig(level=log_level)
+    logging.basicConfig(
+        format="%(asctime)s [%(name)-18.18s] [%(levelname)-5.5s] %(message)s",
+        level=log_level
+    )
     log.setLevel(log_level)
 
     global crawler, original_sigint
