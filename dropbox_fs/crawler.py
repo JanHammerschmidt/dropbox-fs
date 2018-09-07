@@ -39,11 +39,12 @@ class DropboxCrawler:
     _db_token: str
     _db_base_path: str
 
-    def __init__(self):
+    def __init__(self, finished_initial_crawl_callback=lambda: None):
         """ You must either call `init` or `load_snapshot` to get things going."""
 
         self.save_interval = 120  # periodically save every n seconds
         self.save_interval_entries = 500  # save when n items have been updated
+        self.finished_initial_crawl_callback = finished_initial_crawl_callback
 
         self.space_used = 0
         self.space_allocated = 0
@@ -132,6 +133,7 @@ class DropboxCrawler:
                     self.save_snapshot()
                     break
 
+        self.finished_initial_crawl_callback()
         log.info('poll for changes..')
         while not self._stop_request:
             log.debug('longpoll')

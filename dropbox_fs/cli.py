@@ -30,6 +30,17 @@ def exit_handler(signum, frame):
         sys.exit(1)
     sys.exit(0)
 
+    
+def dropbox_fs():
+    from dropbox_fs.fs import DropboxFs
+    from fuse import FUSE
+    global fuse
+    fuse = FUSE(DropboxFs(crawler.root), "z:", foreground=False, ro=True)
+
+
+def start_fs():
+    Thread(target=dropbox_fs).start()
+
 
 def main():
     import argparse
@@ -49,7 +60,7 @@ def main():
     log.setLevel(log_level)
 
     global crawler, original_sigint
-    crawler = DropboxCrawler()
+    crawler = DropboxCrawler(start_fs)
     if args.action == 'init':
         if args.dropbox_token is None:
             args.error('initialization requires a dropbox token')
