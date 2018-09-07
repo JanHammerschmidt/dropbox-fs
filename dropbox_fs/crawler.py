@@ -8,7 +8,7 @@ from dropbox.exceptions import ApiError, AuthError
 from dropbox.files import FileMetadata, FolderMetadata
 from .misc import remove_from_dict_case_insensitive
 
-data_version = 2  # bump this on changes how the data is saved
+data_version = 3  # bump this on changes how the data is saved
 data_file = 'data.pkl'
 
 # https://www.dropbox.com/developers/documentation/http/documentation#files-list_folder-continue
@@ -62,11 +62,14 @@ class DropboxCrawler:
         self._db_base_path = db_base_path
         self._crawl_cursor = None
         self._finished_crawling = False
-        log.info('Connecting to Dropbox...')
-        self.dbx = dropbox.Dropbox(db_token)
+        self.connect()
         self._update_cursor = self.dbx.files_list_folder_get_latest_cursor(self._db_base_path, recursive=True,
                                                                            include_deleted=True).cursor
         self.root = Folder(self._db_base_path)
+
+    def connect(self):
+        log.info('Connecting to Dropbox...')
+        self.dbx = dropbox.Dropbox(self._db_token)
 
     def access_token_is_valid(self):
         """ check if the access token is valid """
@@ -163,13 +166,13 @@ class DropboxCrawler:
                 )
             self._db_base_path = data['root_path']
             self.root = data['root']
+            self._db_token = data['db_token']
             self._crawl_cursor = data['crawl_cursor']
             self._update_cursor = data['update_cursor']
             self._finished_crawling = data['finished_crawling']
-            self.space_used = data['space_used']
-            self.space_allocated = data['space_allocated']
             self._last_save = datetime.fromtimestamp(data['last_save'])
             log.info('successfully loaded data')
+            self.connect()
             return True
         except RuntimeError as e:
             log.error("loading data failed: {}".format(str(e)))
@@ -188,11 +191,10 @@ class DropboxCrawler:
             'data_version': data_version,
             'root_path': self._db_base_path,
             'root': self.root,
+            'db_token': self._db_token,
             'crawl_cursor': self._crawl_cursor,
             'update_cursor': self._update_cursor,
             'finished_crawling': self._finished_crawling,
-            'space_used': self.space_used,
-            'space_allocated': self.space_allocated,
             'last_save': self._last_save.timestamp()
         }
         with open(data_file, 'wb') as f:
