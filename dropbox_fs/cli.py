@@ -46,7 +46,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('action', type=str, choices=['init', 'load'], default='load')
+    parser.add_argument('action', type=str, choices=['init', 'load'], nargs='?', default='load')
     parser.add_argument('-t', '--dropbox-token', type=str)
     parser.add_argument('-p', '--dropbox-path', type=str, default='')
     parser.add_argument('-v', '--verbose', action='store_true')
