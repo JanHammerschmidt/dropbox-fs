@@ -15,7 +15,7 @@ class DropboxFs(LoggingMixIn, Operations):
         self.file_attr_base = dict(st_mode=(stat.S_IFREG | 0o666), st_nlink=1)
 
     def readdir(self, path, fh):
-        log.info('readdir {} {}'.format(path, fh))
+        log.debug('readdir {} {}'.format(path, fh))
         folder = self.find_folder(path)  # os.path.normpath
         if folder is None:
             log.warning('unknown path: {}'.format(path))
@@ -28,7 +28,7 @@ class DropboxFs(LoggingMixIn, Operations):
         return attr
 
     def getattr(self, path, fh=None):
-        log.info('getattr {} {}'.format(path, fh))
+        log.debug('getattr {} {}'.format(path, fh))
         if path == '/':
             return self.folder_attr
         else:
