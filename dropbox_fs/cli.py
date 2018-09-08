@@ -60,24 +60,24 @@ def main():
     )
     logging.getLogger('dropbox_fs').setLevel(log_level)
 
-    if args.local_folder is None:
-        log.warning('No local dropbox folder specified')
-        local_folder = None
-    else:
-        local_folder = Path(args.local_folder)
-        if not local_folder.exists():
-            args.error('Local dropbox folder not found')
-
     global crawler, original_sigint, fs
-    crawler = DropboxCrawler(start_fs, local_folder)
-    fs = DropboxFs(crawler)
+    crawler = DropboxCrawler(start_fs)
     if args.action == 'init':
-        if args.dropbox_token is None:
+        if args.token is None:
             args.error('initialization requires a dropbox token')
-        crawler.init(args.dropbox_token, args.dropbox_path)
+        if args.local_folder is None:
+            log.warning('No local dropbox folder specified')
+            local_folder = None
+        else:
+            local_folder = Path(args.local_folder)
+            if not local_folder.exists():
+                args.error('Local dropbox folder not found')
+        crawler.init(args.token, args.path, local_folder)
     elif args.action == 'load':
-        crawler.load_snapshot()
+        if not crawler.load_snapshot():
+            return
 
+    fs = DropboxFs(crawler)
     Thread(target=crawler.crawl).start()
     original_sigint = signal.signal(signal.SIGINT, exit_handler)
     if os.name != 'nt':

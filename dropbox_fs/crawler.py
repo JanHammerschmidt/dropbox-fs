@@ -40,8 +40,9 @@ class DropboxCrawler:
     _finished_crawling: bool
     _db_token: str
     _db_base_path: str
+    _local_folder: Path
 
-    def __init__(self, finished_initial_crawl_callback=lambda: None, local_folder: Path = None):
+    def __init__(self, finished_initial_crawl_callback=lambda: None):
         """ You must either call `init` or `load_snapshot` to get things going."""
 
         self.save_interval = 120  # periodically save every n seconds
@@ -51,7 +52,6 @@ class DropboxCrawler:
         self.space_used = 0
         self.space_allocated = 0
 
-        self._local_folder = local_folder
         self._finished = Event()
         self._stop_request = False
         self._updated_entries = 0  # count how many entries have been updated
@@ -59,10 +59,11 @@ class DropboxCrawler:
 
         self.dbx = None
 
-    def init(self, db_token, db_base_path=''):
+    def init(self, db_token, db_base_path='', local_folder: Path = None):
         """ db_base_path: for dropbox root use ''. Otherwise prepend a '/' """
         self._db_token = db_token
         self._db_base_path = db_base_path
+        self._local_folder = local_folder
         self._crawl_cursor = None
         self._finished_crawling = False
         self.connect()
