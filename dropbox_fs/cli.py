@@ -3,8 +3,10 @@ import sys
 import os
 import signal
 from threading import Thread
-
+from pathlib import Path
+from fuse import FUSE
 from dropbox_fs.crawler import DropboxCrawler
+from dropbox_fs.fs import DropboxFs
 from dropbox_fs.misc import wait_for_event
 
 log = logging.getLogger(__name__)
@@ -30,12 +32,10 @@ def exit_handler(signum, frame):
         sys.exit(1)
     sys.exit(0)
 
-    
+
 def dropbox_fs():
-    from dropbox_fs.fs import DropboxFs
-    from fuse import FUSE
-    global fuse
-    fuse = FUSE(DropboxFs(crawler.root), "z:", foreground=False, ro=True)
+    log.info('starting file system on z:')
+    FUSE(fs, "z:", foreground=True, ro=True)
 
 
 def start_fs():
@@ -47,8 +47,9 @@ def main():
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('action', type=str, choices=['init', 'load'], nargs='?', default='load')
-    parser.add_argument('-t', '--dropbox-token', type=str)
-    parser.add_argument('-p', '--dropbox-path', type=str, default='')
+    parser.add_argument('-t', '--token', type=str)
+    parser.add_argument('-p', '--path', type=str, default='')
+    parser.add_argument('-l', '--local-folder', type=str, default=None)
     parser.add_argument('-v', '--verbose', action='store_true')
     args = parser.parse_args()
 
@@ -59,8 +60,17 @@ def main():
     )
     log.setLevel(log_level)
 
-    global crawler, original_sigint
-    crawler = DropboxCrawler(start_fs)
+    if args.local_folder is None:
+        log.warning('No local dropbox folder specified')
+        local_folder = None
+    else:
+        local_folder = Path(args.local_folder)
+        if not local_folder.exists():
+            args.error('Local dropbox folder not found')
+
+    global crawler, original_sigint, fs
+    crawler = DropboxCrawler(start_fs, local_folder)
+    fs = DropboxFs(crawler)
     if args.action == 'init':
         if args.dropbox_token is None:
             args.error('initialization requires a dropbox token')

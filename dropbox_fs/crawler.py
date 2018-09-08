@@ -3,12 +3,13 @@ import shutil
 import pickle
 import dropbox
 from datetime import datetime
+from pathlib import Path
 from threading import Event
 from dropbox.exceptions import ApiError, AuthError
 from dropbox.files import FileMetadata, FolderMetadata
 from .misc import remove_from_dict_case_insensitive
 
-data_version = 3  # bump this on changes how the data is saved
+data_version = 4  # bump this on changes how the data is saved
 data_file = 'data.pkl'
 
 # https://www.dropbox.com/developers/documentation/http/documentation#files-list_folder-continue
@@ -39,7 +40,7 @@ class DropboxCrawler:
     _db_token: str
     _db_base_path: str
 
-    def __init__(self, finished_initial_crawl_callback=lambda: None):
+    def __init__(self, finished_initial_crawl_callback=lambda: None, local_folder: Path = None):
         """ You must either call `init` or `load_snapshot` to get things going."""
 
         self.save_interval = 120  # periodically save every n seconds
@@ -49,6 +50,7 @@ class DropboxCrawler:
         self.space_used = 0
         self.space_allocated = 0
 
+        self._local_folder = local_folder
         self._finished = Event()
         self._stop_request = False
         self._updated_entries = 0  # count how many entries have been updated
@@ -123,7 +125,7 @@ class DropboxCrawler:
         self.space_allocated = data.allocation.get_individual().allocated
 
         if not self._finished_crawling:
-            log.info('start crawling..')
+            log.info('doing initial crawl..')
             if self._crawl_cursor is None:
                 data = dbx.files_list_folder(self._db_base_path, recursive=True)
                 self._crawl_cursor = self.update_tree(data)
@@ -166,6 +168,7 @@ class DropboxCrawler:
                 )
             self._db_base_path = data['root_path']
             self.root = data['root']
+            self._local_folder = data['local_folder']
             self._db_token = data['db_token']
             self._crawl_cursor = data['crawl_cursor']
             self._update_cursor = data['update_cursor']
@@ -191,6 +194,7 @@ class DropboxCrawler:
             'data_version': data_version,
             'root_path': self._db_base_path,
             'root': self.root,
+            'local_folder': self._local_folder,
             'db_token': self._db_token,
             'crawl_cursor': self._crawl_cursor,
             'update_cursor': self._update_cursor,

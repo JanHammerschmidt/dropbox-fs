@@ -4,13 +4,16 @@ import stat
 import errno
 from fuse import FuseOSError, Operations, LoggingMixIn
 
+from dropbox_fs.crawler import DropboxCrawler
+
 log = logging.getLogger(__name__)
 
 
 class DropboxFs(LoggingMixIn, Operations):
-    def __init__(self, root):
+    def __init__(self, crawler: DropboxCrawler):
         # super().__init__()
-        self.root = root
+        self.root = crawler.root
+        self.local_folder = crawler._local_folder
         self.folder_attr = dict(st_mode=(stat.S_IFDIR | 0o777), st_nlink=1)
         self.file_attr_base = dict(st_mode=(stat.S_IFREG | 0o666), st_nlink=1)
 
