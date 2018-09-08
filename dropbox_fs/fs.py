@@ -4,7 +4,7 @@ import stat
 import errno
 from fuse import FuseOSError, Operations, LoggingMixIn
 
-from dropbox_fs.crawler import DropboxCrawler
+from dropbox_fs.crawler import DropboxCrawler, File
 
 log = logging.getLogger(__name__)
 
@@ -25,9 +25,10 @@ class DropboxFs(LoggingMixIn, Operations):
             return ['.', '..']
         return ['.', '..'] + list(folder.folders.keys()) + list(folder.files.keys())
 
-    def file_attr(self, file):
+    def file_attr(self, file: File):
         attr = self.file_attr_base.copy()
         attr['st_size'] = file.size
+        attr['st_mtime'] = file.modified.timestamp()
         return attr
 
     def getattr(self, path, fh=None):
