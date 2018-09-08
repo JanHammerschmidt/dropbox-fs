@@ -41,6 +41,7 @@ class DropboxCrawler:
     _db_token: str
     _db_base_path: str
     _local_folder: Path
+    _base_path_depth: int
 
     def __init__(self, finished_initial_crawl_callback=lambda: None):
         """ You must either call `init` or `load_snapshot` to get things going."""
@@ -72,6 +73,7 @@ class DropboxCrawler:
         self.root = Folder(self._db_base_path)
 
     def connect(self):
+        self._base_path_depth = len([t for t in self._db_base_path.split('/') if len(t) > 0])
         log.info('Connecting to Dropbox...')
         self.dbx = dropbox.Dropbox(self._db_token)
 
@@ -91,7 +93,9 @@ class DropboxCrawler:
         log.debug('new data (%i entries)' % len(data.entries))
         self._updated_entries += len(data.entries)
         for e in data.entries:
-            path_components = e.path_display[1:].split('/')
+            path_components = e.path_display[1:].split('/')[self._base_path_depth:]
+            if len(path_components) <= 0:
+                continue
             folder = self.root
             for f in path_components[:-1]:
                 try:
