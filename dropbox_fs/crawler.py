@@ -5,6 +5,7 @@ import dropbox
 from datetime import datetime
 from pathlib import Path
 from threading import Event
+from requests.exceptions import ReadTimeout, ConnectionError
 from dropbox.exceptions import ApiError, AuthError
 from dropbox.files import FileMetadata, FolderMetadata
 from .misc import remove_from_dict_case_insensitive
@@ -142,11 +143,19 @@ class DropboxCrawler:
         log.info('poll for changes..')
         while not self._stop_request:
             log.debug('longpoll')
-            changes = dbx.files_list_folder_longpoll(self._update_cursor, timeout=30)
-            # TODO: what if `changes.backoff is not None`?
-            if changes.changes:
-                data = dbx.files_list_folder_continue(self._update_cursor)
-                self._update_cursor = self.update_tree(data)
+            try:
+                changes = dbx.files_list_folder_longpoll(self._update_cursor, timeout=30)
+            except ReadTimeout:
+                continue
+            else:
+                # TODO: what if `changes.backoff is not None`?
+                if changes.changes:
+                    try:
+                        data = dbx.files_list_folder_continue(self._update_cursor)
+                    except ConnectionError:
+                        pass
+                    else:
+                        self._update_cursor = self.update_tree(data)
             if self._stop_request:
                 break
             if (datetime.now() - self._last_save).total_seconds() > self.save_interval \
@@ -187,6 +196,8 @@ class DropboxCrawler:
         self._finished.clear()  # don't kill the process during saving data!
         try:
             shutil.move(data_file, 'data.prev.pkl')
+        except FileNotFoundError:
+            pass
         except shutil.Error as e:
             log.warning("moving {} to {} failed ({})".format(data_file, 'data.prev.pkl', str(e)))
         self._last_save = datetime.now()
