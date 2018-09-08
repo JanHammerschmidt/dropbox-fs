@@ -55,10 +55,10 @@ def main():
 
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(
-        format="%(asctime)s [%(name)-18.18s] [%(levelname)-5.5s] %(message)s",
-        level=log_level
+        format="%(asctime)s [%(name)-18.18s] [%(levelname)-5.5s] %(message)s"
+        # level=log_level
     )
-    log.setLevel(log_level)
+    logging.getLogger('dropbox_fs').setLevel(log_level)
 
     if args.local_folder is None:
         log.warning('No local dropbox folder specified')
