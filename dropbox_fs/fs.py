@@ -2,6 +2,7 @@ import logging
 import os
 import stat
 import errno
+from time import time
 from fuse import FuseOSError, Operations, LoggingMixIn
 
 from dropbox_fs.crawler import DropboxCrawler, File
@@ -14,8 +15,11 @@ class DropboxFs(LoggingMixIn, Operations):
         # super().__init__()
         self.root = crawler.root
         self.local_folder = crawler._local_folder
+        self.time_created = time()
         self.folder_attr = dict(st_mode=(stat.S_IFDIR | 0o777), st_nlink=1)
-        self.file_attr_base = dict(st_mode=(stat.S_IFREG | 0o666), st_nlink=1)
+        for t in ['st_ctime', 'st_mtime', 'st_atime']:
+            self.folder_attr[t] = self.time_created
+        self.file_attr_base = dict(st_mode=(stat.S_IFREG | 0o666), st_nlink=1, st_ctime=self.time_created)
 
     def readdir(self, path, fh):
         log.debug('readdir {} {}'.format(path, fh))
@@ -28,7 +32,9 @@ class DropboxFs(LoggingMixIn, Operations):
     def file_attr(self, file: File):
         attr = self.file_attr_base.copy()
         attr['st_size'] = file.size
-        attr['st_mtime'] = file.modified.timestamp()
+        modified = file.modified.timestamp()
+        attr['st_mtime'] = modified
+        attr['st_atime'] = modified
         return attr
 
     def getattr(self, path, fh=None):
