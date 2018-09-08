@@ -146,15 +146,16 @@ class DropboxCrawler:
             log.debug('longpoll')
             try:
                 changes = dbx.files_list_folder_longpoll(self._update_cursor, timeout=30)
-            except ReadTimeout:
+            except ReadTimeout as e:
+                log.warning(e)
                 continue
             else:
                 # TODO: what if `changes.backoff is not None`?
                 if changes.changes:
                     try:
                         data = dbx.files_list_folder_continue(self._update_cursor)
-                    except ConnectionError:
-                        pass
+                    except ConnectionError as e:
+                        log.warning(e)
                     else:
                         self._update_cursor = self.update_tree(data)
             if self._stop_request:
