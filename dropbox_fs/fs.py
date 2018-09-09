@@ -14,7 +14,7 @@ class DropboxFs(LoggingMixIn, Operations):
     def __init__(self, crawler: DropboxCrawler):
         # super().__init__()
         self.root = crawler.root
-        self.local_folder = crawler._local_folder
+        self.local_folder = crawler._local_folder / crawler._db_base_path[1:]
         self.time_created = time()
         self.folder_attr = dict(st_mode=(stat.S_IFDIR | 0o777), st_nlink=1)
         for t in ['st_ctime', 'st_mtime', 'st_atime']:
@@ -39,6 +39,11 @@ class DropboxFs(LoggingMixIn, Operations):
 
     def getattr(self, path, fh=None):
         log.debug('getattr {} {}'.format(path, fh))
+        local = self.local_folder / path[1:]
+        if local.exists():
+            st = os.lstat(local)
+            return {key: getattr(st, key) for key in
+                    ['st_atime', 'st_ctime', 'st_gid', 'st_mode', 'st_mtime', 'st_nlink', 'st_size', 'st_uid']}
         if path == '/':
             return self.folder_attr
         else:
