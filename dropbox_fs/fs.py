@@ -67,6 +67,21 @@ class DropboxFs(LoggingMixIn, Operations):
                     return None
         return cur_folder
 
+    def open(self, path, flags):
+        local = self.local_folder / path[1:]
+        if local.exists():
+            return os.open(local, flags)
+        return 0
+
+    def read(self, path, size, offset, fh):
+        if fh == 0:
+            raise FuseOSError(errno.EIO)
+        os.lseek(fh, offset, 0)
+        return os.read(fh, size)
+
+    def release(self, path, fh):
+        return os.close(fh)
+
     # access = None
     # flush = None
     # getxattr = None
