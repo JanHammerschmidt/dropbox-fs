@@ -1,10 +1,12 @@
 import logging
+import argparse
 import sys
 import os
 import signal
 from threading import Thread
 from pathlib import Path
 from fuse import FUSE
+from dropbox_fs.cache import FileCache
 from dropbox_fs.crawler import DropboxCrawler
 from dropbox_fs.fs import DropboxFs
 from dropbox_fs.misc import wait_for_event
@@ -43,8 +45,6 @@ def start_fs():
 
 
 def main():
-    import argparse
-
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('action', type=str, choices=['init', 'load'], nargs='?', default='load')
     parser.add_argument('-t', '--token', type=str)
@@ -77,7 +77,8 @@ def main():
         if not crawler.load_snapshot():
             return
 
-    fs = DropboxFs(crawler)
+    cache = FileCache(Path.cwd() / 'cache', crawler.dbx)
+    fs = DropboxFs(crawler, cache)
     Thread(target=crawler.crawl).start()
     original_sigint = signal.signal(signal.SIGINT, exit_handler)
     if os.name != 'nt':

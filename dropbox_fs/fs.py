@@ -6,15 +6,21 @@ from time import time
 from fuse import FuseOSError, Operations, LoggingMixIn
 
 from dropbox_fs.crawler import DropboxCrawler, File
+from dropbox_fs.cache import FileCache
 
 log = logging.getLogger(__name__)
 
 
 class DropboxFs(LoggingMixIn, Operations):
-    def __init__(self, crawler: DropboxCrawler):
+    def __init__(self, crawler: DropboxCrawler, file_cache: FileCache):
         # super().__init__()
         self.root = crawler.root
-        self.local_folder = crawler._local_folder / crawler._db_base_path[1:]
+        self.file_cache = file_cache
+        self.db_base_path = crawler._db_base_path
+        if len(self.db_base_path) <= 0 or self.db_base_path[-1] != '/':
+            self.db_base_path += '/'
+
+        self.local_folder = crawler._local_folder / self.db_base_path[1:]
         self.time_created = time()
         self.folder_attr = dict(st_mode=(stat.S_IFDIR | 0o777), st_nlink=1)
         for t in ['st_ctime', 'st_mtime', 'st_atime']:
@@ -38,7 +44,7 @@ class DropboxFs(LoggingMixIn, Operations):
         return attr
 
     def getattr(self, path, fh=None):
-        log.debug('getattr {} {}'.format(path, fh))
+        # log.debug('getattr {} {}'.format(path, fh))
         local = self.local_folder / path[1:]
         if local.exists():
             st = os.lstat(local)
@@ -68,19 +74,26 @@ class DropboxFs(LoggingMixIn, Operations):
         return cur_folder
 
     def open(self, path, flags):
-        local = self.local_folder / path[1:]
+        rel_path = path[1:]
+        local = self.local_folder / rel_path
         if local.exists():
+            log.debug('open locally: {}'.format(path))
             return os.open(local, flags)
-        return 0
+        folder, item = os.path.split(path)
+        folder = self.find_folder(folder)
+        if item in folder.files:
+            log.debug('trying to open from cache: {}'.format(path))
+            return self.file_cache.open(path, rel_path, folder.files[item], self.db_base_path + rel_path, flags)
+        else:
+            return 0
 
     def read(self, path, size, offset, fh):
-        if fh == 0:
-            raise FuseOSError(errno.EIO)
-        os.lseek(fh, offset, 0)
-        return os.read(fh, size)
+        log.debug('read {}'.format(path))
+        return self.file_cache.read(path, size, offset, fh)
 
     def release(self, path, fh):
-        return os.close(fh)
+        log.debug('close {}'.format(path))
+        self.file_cache.close(fh)
 
     # access = None
     # flush = None
