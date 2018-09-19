@@ -1,5 +1,5 @@
-import logging
 import os
+import logging
 import stat
 import errno
 from time import time
@@ -55,7 +55,9 @@ class DropboxFs(LoggingMixIn, Operations):
         else:
             folder, item = os.path.split(path)
             folder = self.find_folder(folder)
-            if item in folder.folders:
+            if folder is None:
+                raise FuseOSError(errno.ENOENT)
+            elif item in folder.folders:
                 return self.folder_attr
             elif item in folder.files:
                 return self.file_attr(folder.files[item])
@@ -78,7 +80,7 @@ class DropboxFs(LoggingMixIn, Operations):
         local = self.local_folder / rel_path
         if local.exists():
             log.debug('open locally: {}'.format(path))
-            return os.open(local, flags)
+            return self.file_cache.open_file(local, flags)
         folder, item = os.path.split(path)
         folder = self.find_folder(folder)
         if item in folder.files:
@@ -88,7 +90,9 @@ class DropboxFs(LoggingMixIn, Operations):
             return 0
 
     def read(self, path, size, offset, fh):
-        log.debug('read {}'.format(path))
+        if fh == 0:
+            raise FuseOSError(errno.EIO)
+        log.debug('read {} @ {}: {}'.format(size, offset, path))
         return self.file_cache.read(path, size, offset, fh)
 
     def release(self, path, fh):

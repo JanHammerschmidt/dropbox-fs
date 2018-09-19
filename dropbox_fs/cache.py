@@ -73,23 +73,24 @@ class FileCache:
 
         if file.exists():
             if db_path in self.downloading:
-                return self._open_file(file, flags)
-            return self._open_file(file, flags)
+                return self.open_file(file, flags)
+            return self.open_file(file, flags)
             # downloading ..?
             # newer ..?
         else:
             self.downloading[path] = FileDownloader(path, file, self.dbx, db_path, self.finished_downloading)
-            return self._open_file(file, flags)
+            return self.open_file(file, flags)
 
     def read(self, path, size, offset, fh):
         try:
             f = self.files_opened[fh]
         except KeyError:
+            log.error('no open file found while reading from {}'.format(path))
             raise FuseOSError(errno.EIO)
         if path in self.downloading:
             self.downloading[path].wait_for_size(offset+size)
-        else:
-            log.debug('{} not in {}'.format(path, list(self.downloading.keys())))
+        # else:
+        #     log.debug('{} not in {}'.format(path, list(self.downloading.keys())))
         f.seek(offset)
         return f.read(size)
 
@@ -97,14 +98,14 @@ class FileCache:
         try:
             self.files_opened.pop(fh).close()
         except KeyError:
-            log.error('no open file found for file handle {}'.format(fh))
+            log.error('no open file found while closing file handle {}'.format(fh))
 
     def finished_downloading(self, downloader: FileDownloader):
         log.debug('removing {} from downloading'.format(downloader.db_path))
         assert downloader.successfully_finished
         del self.downloading[downloader.path]
 
-    def _open_file(self, file, _flags) -> int:
+    def open_file(self, file, _flags) -> int:
         f = open(file, 'rb')
         self.files_opened[f.fileno()] = f
         return f.fileno()
